@@ -38,3 +38,11 @@ This is the FastAPI + vanilla JS NEET-PG QBank app with the Pediatrics source QB
 ## Important production note
 
 The initial Pediatrics PDF and parsed JSON are bundled with the app. Uploaded replacement PDFs are written to the server filesystem; on free/ephemeral hosting they may not survive a redeploy/restart. For a production multi-user version, use object storage + PostgreSQL and authenticated admin uploads.
+
+
+## Updated quiz behavior
+- Practice mode displays up to 5 questions per screen.
+- Every question has its own independent option selection and Submit Answer button.
+- After submission, the selected wrong answer is red, the correct answer is green, and the explanation is always shown.
+- Source PDF pages are mapped to the page where each question actually starts.
+- The full source page is hidden inside “View source PDF page …” so multiple questions on one PDF page are not confused with the interactive question.
