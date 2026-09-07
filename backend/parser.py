@@ -1,4 +1,5 @@
 import fitz, re, json, os
+from bisect import bisect_right
 from pathlib import Path
 
 TOC_RE = re.compile(r'(?m)^(\d+)\.\s*(.+?)\s+(\d{1,4})\s*$')
@@ -35,7 +36,7 @@ def split_questions(text):
         start=m.start(); end=matches[i+1].start() if i+1<len(matches) else len(text)
         num=int(m.group(1)); body=text[m.end():end].strip()
         if num<=0 or num>500: continue
-        blocks.append((num,body))
+        blocks.append((num,body,start))
     return blocks
 
 def parse_question(body):
@@ -53,7 +54,16 @@ def parse_question(body):
 def parse_chapter(doc, lesson, next_page):
     start=lesson['page']-1
     end=(next_page-1 if next_page else len(doc))
-    text='\n'.join(doc[i].get_text() for i in range(start,end))
+    page_texts=[doc[i].get_text() for i in range(start,end)]
+    text='\n'.join(page_texts)
+    # Character offsets in the joined text let us map every question to the
+    # actual PDF page where that question begins, rather than the lesson's
+    # starting page.
+    page_offsets=[]
+    offset=0
+    for pt in page_texts:
+        page_offsets.append(offset)
+        offset += len(pt) + 1
     # cut before answer/solution section for question extraction
     cut=min([p for p in [text.find('Correct Answers'), text.find('Solution for Question')] if p>=0] or [len(text)])
     qtext=text[:cut]
@@ -75,8 +85,10 @@ def parse_chapter(doc, lesson, next_page):
         qn=int(m.group(1)); s=m.end(); e=sm[i+1].start() if i+1<len(sm) else len(text)
         sols[qn]=clean(text[s:e])
     questions=[]
-    for num,body in raw:
+    for num,body,qstart in raw:
         q,opts=parse_question(body)
+        page_idx=bisect_right(page_offsets,qstart)-1 if page_offsets else 0
+        source_page=start + page_idx + 1
         ans_idx=answers.get(num)
         correct=chr(64+ans_idx) if ans_idx and 1<=ans_idx<=5 else None
         sol=sols.get(num,'')
@@ -84,7 +96,7 @@ def parse_chapter(doc, lesson, next_page):
         q=re.sub(r'Prepladder X Qbank.*?Page \d+ of 1310','',q,flags=re.S).strip()
         for o in opts:
             o['text']=re.sub(r'Prepladder X Qbank.*?Page \d+ of 1310','',o['text'],flags=re.S).strip()
-        questions.append({'number':num,'question':q,'options':opts,'correct_answer':correct,'answer_index':ans_idx,'explanation':sol,'source_page':lesson['page']})
+        questions.append({'number':num,'question':q,'options':opts,'correct_answer':correct,'answer_index':ans_idx,'explanation':sol,'source_page':source_page})
     return questions
 
 def parse_pdf(path):
